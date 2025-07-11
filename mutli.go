@@ -2,7 +2,7 @@
 // The original code is from:
 // 1.blog https://avito.tech/old/tpost/yfhycud6h1-logirovanie-kak-v-avito-goslog
 // 2.code https://github.com/avito-tech/avitotech-presentations/commit/cf5ff7ea041dcdd3846634239d9ac27d5c80a86a
-package main
+package slogx
 
 import (
 	"context"
