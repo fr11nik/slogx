@@ -1,13 +1,16 @@
-// THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+// PURPOSE AND NONINFRINGEMENT.
+
 // The original code is from:
 // 1.blog https://avito.tech/old/tpost/yfhycud6h1-logirovanie-kak-v-avito-goslog
 // 2.code https://github.com/avito-tech/avitotech-presentations/commit/cf5ff7ea041dcdd3846634239d9ac27d5c80a86a
+
 package slogx
 
 import (
 	"context"
 	"io"
-	"log"
 	"log/slog"
 	"strings"
 
@@ -15,8 +18,8 @@ import (
 )
 
 // -----------------------------------------------
-
 // HandlerMiddlware for middleware
+
 type HandlerMiddlware struct {
 	next slog.Handler
 }
@@ -26,7 +29,7 @@ func NewHandlerMiddleware(next slog.Handler) *HandlerMiddlware {
 	return &HandlerMiddlware{next: next}
 }
 
-// Enabled reports whether the handler handles records at the given level. The handler ignores records whose level is lower. It is called early, before any arguments are processed, to save effort if the log event should be discarded. If called from a Logger method, the first argument is the context passed to that method, or context.Background() if nil was passed or the method does not take a context. The context is passed so Enabled can use its values to make a decision.
+// Enabled reports whether the handler handles records at the given level.
 func (h *HandlerMiddlware) Enabled(ctx context.Context, rec slog.Level) bool {
 	return h.next.Enabled(ctx, rec)
 }
@@ -64,12 +67,12 @@ func (h *HandlerMiddlware) Handle(ctx context.Context, rec slog.Record) error {
 
 // WithAttrs adds attributes to the log record.
 func (h *HandlerMiddlware) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return &HandlerMiddlware{next: h.next.WithAttrs(attrs)} // не забыть обернуть, но осторожно
+	return &HandlerMiddlware{next: h.next.WithAttrs(attrs)}
 }
 
 // WithGroup adds a new group to the log record.
 func (h *HandlerMiddlware) WithGroup(name string) slog.Handler {
-	return &HandlerMiddlware{next: h.next.WithGroup(name)} // не забыть обернуть, но осторожно
+	return &HandlerMiddlware{next: h.next.WithGroup(name)}
 }
 
 type logCtx struct {
@@ -196,44 +199,48 @@ func WrapError(ctx context.Context, err error) error {
 
 // ErrorCtx adds ctx to err
 func ErrorCtx(ctx context.Context, err error) context.Context {
-	if e, ok := err.(*errorWithLogCtx); ok { // в реальной жизни используйте error.As
+	if e, ok := err.(*errorWithLogCtx); ok {
 		return context.WithValue(ctx, key, e.ctx)
 	}
 	return ctx
 }
 
 func CombineContexts(logctx context.Context, requestCtx context.Context) context.Context {
-	// Получаем logCtx из логирующего контекста
 	if lc, ok := logctx.Value(key).(logCtx); ok {
-		// Проверяем, если в requestCtx есть traceID, если нет — добавляем
 		if rc, ok := requestCtx.Value(key).(logCtx); ok {
 			if lc.TraceID == "" && rc.TraceID != "" {
 				lc.TraceID = rc.TraceID
 			}
 		}
-		// Возвращаем комбинированный контекст
 		return context.WithValue(requestCtx, key, lc)
 	}
-
-	// Если logCtx нет, просто возвращаем requestCtx
 	return requestCtx
 }
 
 // -----------------------------------------------
 
-// InitLogging init logger by JSON hanlder and store into io.Writer
-func InitLogging(w io.Writer, opts ...Option) {
-	if w == nil {
-		log.Fatal("slog: writer is nil")
-	}
+// InitLogging initializes logging with the given options and sets slog.Default.
+// If no handler options (WithJSONHandler, WithTextHandler, WithHandler) are provided,
+// NO default handler is added — you must explicitly choose your format.
+//
+// Returns *MultiHandler so you can inject more handlers later (e.g. OTel bridge).
+func InitLogging(opts ...Option) *MultiHandler {
 	hm := &MultiHandler{}
+
 	for _, opt := range opts {
 		opt(hm)
 	}
 
-	// Создаём мульти-обработчик
-	handler := slog.Handler(slog.NewJSONHandler(w, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	handler = NewHandlerMiddleware(handler)
-	hm.handlers = append(hm.handlers, handler)
 	slog.SetDefault(slog.New(hm))
+	return hm
+}
+
+// InitLoggingJSON is a convenience shortcut that behaves like the old InitLogging:
+// creates a JSON handler writing to w, wraps it in HandlerMiddleware, applies extra opts.
+func InitLoggingJSON(w io.Writer, opts ...Option) *MultiHandler {
+	allOpts := append(
+		[]Option{WithJSONHandler(w, nil)},
+		opts...,
+	)
+	return InitLogging(allOpts...)
 }

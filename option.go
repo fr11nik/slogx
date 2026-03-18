@@ -5,14 +5,58 @@
 package slogx
 
 import (
+	"io"
+	"log/slog"
+
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 )
 
 type Option func(*MultiHandler)
 
+// WithOtelSlogOption adds OpenTelemetry slog bridge handler.
 func WithOtelSlogOption(serviceName string, opts ...otelslog.Option) Option {
 	return func(h *MultiHandler) {
 		tt := otelslog.NewHandler(serviceName, opts...)
-		h.handlers = append(h.handlers, tt)
+		h.AddHandler(tt)
+	}
+}
+
+// WithJSONHandler adds slog.JSONHandler as the primary handler.
+func WithJSONHandler(w io.Writer, opts *slog.HandlerOptions) Option {
+	return func(h *MultiHandler) {
+		if opts == nil {
+			opts = &slog.HandlerOptions{Level: slog.LevelDebug}
+		}
+		handler := slog.Handler(slog.NewJSONHandler(w, opts))
+		handler = NewHandlerMiddleware(handler)
+		h.AddHandler(handler)
+	}
+}
+
+// WithTextHandler adds slog.TextHandler as the primary handler.
+func WithTextHandler(w io.Writer, opts *slog.HandlerOptions) Option {
+	return func(h *MultiHandler) {
+		if opts == nil {
+			opts = &slog.HandlerOptions{Level: slog.LevelDebug}
+		}
+		handler := slog.Handler(slog.NewTextHandler(w, opts))
+		handler = NewHandlerMiddleware(handler)
+		h.AddHandler(handler)
+	}
+}
+
+// WithHandler adds any custom slog.Handler.
+// The handler is wrapped with HandlerMiddleware for context extraction.
+func WithHandler(handler slog.Handler) Option {
+	return func(h *MultiHandler) {
+		h.AddHandler(NewHandlerMiddleware(handler))
+	}
+}
+
+// WithRawHandler adds any custom slog.Handler WITHOUT wrapping in HandlerMiddleware.
+// Use this when you handle context extraction yourself.
+func WithRawHandler(handler slog.Handler) Option {
+	return func(h *MultiHandler) {
+		h.AddHandler(handler)
 	}
 }
